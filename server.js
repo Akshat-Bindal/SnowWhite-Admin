@@ -6,6 +6,7 @@ import connectDB from "./config/db.js";
 import serviceRoutes from "./routes/service.js";
 import invoiceRoutes from "./routes/invoice.js";
 import authRoutes from "./routes/auth.js";
+import analyticsRoutes from "./routes/analytics.js";
 
 dotenv.config();
 const app = express();
@@ -16,6 +17,7 @@ app.use(cors());
 app.use(morgan("dev"));
 app.use(express.json());
 
+app.use("/api/analytics", analyticsRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/services", serviceRoutes);
 app.use("/api/invoices", invoiceRoutes);
