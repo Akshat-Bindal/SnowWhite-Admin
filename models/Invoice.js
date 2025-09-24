@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const ItemSchema = new mongoose.Schema({
   description: { type: String, required: true },
-  laundryType: { type: String, enum: ["wash", "iron", "dry"], required: true },
+  laundryType: { type: String, required: true },
   qty: { type: Number, required: true, min: 1 },
   price: { type: Number, required: true, min: 0 },
   amount: { type: Number, required: true }
