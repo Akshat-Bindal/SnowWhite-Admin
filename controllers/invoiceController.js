@@ -1,80 +1,108 @@
-import Invoice from "../models/Invoice.js";
 import mongoose from "mongoose";
+import Invoice from "../models/Invoice.js";
 
-export const getDashboardAnalytics = async (req, res) => {
+// Create Invoice
+export const createInvoice = async (req, res) => {
   try {
-    // Total Orders
-    const totalOrders = await Invoice.countDocuments();
+    const { customerName, customerPhone, customerAddress, deliveryDate, items, tax = 0, discount = 0 } = req.body;
 
-    // Delivered Orders
-    const deliveredOrders = await Invoice.countDocuments({ status: "Delivered" });
+    if (!customerName || !customerPhone || !deliveryDate || !items?.length) {
+      return res.status(400).json({ error: "All fields are required" });
+    }
 
-    // Pending Orders
-    const pendingOrders = await Invoice.countDocuments({ status: "Pending" });
-
-    // Total Revenue
-    const revenueAgg = await Invoice.aggregate([
-      { $group: { _id: null, revenue: { $sum: "$total" } } }
-    ]);
-    const totalRevenue = revenueAgg[0]?.revenue || 0;
-
-    // Total Customers (unique phone)
-    const customersAgg = await Invoice.distinct("customerPhone");
-    const totalCustomers = customersAgg.length;
-
-    // Orders by Laundry Type
-    const typeAgg = await Invoice.aggregate([
-      { $unwind: "$items" },
-      {
-        $group: {
-          _id: "$items.laundryType",
-          count: { $sum: "$items.qty" }
-        }
-      }
-    ]);
-
-    // ====== Date-based analytics ======
-
-    // Today’s start and end
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-
-    const endOfToday = new Date();
-    endOfToday.setHours(23, 59, 59, 999);
-
-    const todaysOrders = await Invoice.countDocuments({
-      createdAt: { $gte: startOfToday, $lte: endOfToday }
+    let subtotal = 0;
+    const formattedItems = items.map((item) => {
+      const amount = item.qty * item.price;
+      subtotal += amount;
+      return { ...item, amount };
     });
 
-    // This Month’s start and end
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const total = subtotal + (subtotal * tax) / 100 - discount;
 
-    const monthlyOrders = await Invoice.countDocuments({
-      createdAt: { $gte: startOfMonth, $lte: endOfMonth }
+    const invoice = new Invoice({
+      customerName,
+      customerPhone,
+      customerAddress,
+      deliveryDate,
+      items: formattedItems,
+      subtotal,
+      tax,
+      discount,
+      total: total < 0 ? 0 : total
     });
 
-    // ====== Final result ======
-    const result = {
-      totalOrders,
-      deliveredOrders,
-      pendingOrders,
-      totalRevenue,
-      totalCustomers,
-      todaysOrders,
-      monthlyOrders,
-      laundryTypes: {
-        wash: typeAgg.find(t => t._id === "wash")?.count || 0,
-        iron: typeAgg.find(t => t._id === "iron")?.count || 0,
-        dry: typeAgg.find(t => t._id === "dry")?.count || 0,
-        "wash & iron": typeAgg.find(t => t._id === "Wash & Iron")?.count || 0
-      }
-    };
-
-    res.json(result);
+    await invoice.save();
+    res.status(201).json(invoice);
   } catch (err) {
-    console.error("Analytics API Error:", err);
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+// Get all invoices with pagination
+export const getInvoices = async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const invoices = await Invoice.find()
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(Number(limit));
+
+    const total = await Invoice.countDocuments();
+    res.json({ invoices, total });
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+// Get invoice by ID
+export const getInvoiceById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid invoice ID" });
+    }
+
+    const invoice = await Invoice.findById(id);
+    if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+
+    res.json(invoice);
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+// Update invoice status
+export const updateInvoiceStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const allowedStatuses = ["Pending", "Processing", "Completed", "Delivered"];
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({ error: "Invalid status" });
+    }
+
+    const invoice = await Invoice.findByIdAndUpdate(id, { status }, { new: true });
+    if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+
+    res.json(invoice);
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+// Delete invoice
+export const deleteInvoice = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const invoice = await Invoice.findByIdAndDelete(id);
+
+    if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+
+    res.json({ message: "Invoice deleted successfully" });
+  } catch (err) {
     res.status(500).json({ error: "Server error" });
   }
 };
