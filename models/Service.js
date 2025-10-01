@@ -5,7 +5,7 @@ const ServiceSchema = new mongoose.Schema(
     title: { type: String, required: true }, // was "name"
     laundryType: {
       type: String,
-      enum: ["Wash", "Iron", "Dry", "Wash & Iron"], // match frontend options
+      enum: ["Wash", "Iron", "Dry", "Wash & Iron","Raffu","Dye"], // match frontend options
       required: false,
     },
     originalPrice: { type: Number, required: false }, // was "price"
